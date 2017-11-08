@@ -1,11 +1,13 @@
 import math, string, sys
 
 class Puzzle:
+	''' Identifies a 9x9 sudoku puzzle grid by name.'''
 	def __init__(self, name, sdku):
 		self.name = name
 		self.sudoku = sdku
 
 def load_file(filename):
+	''' Opens a file that contains a list of puzzles, separated by names. '''
 	# Open file and read all lines
 	f = open(filename, 'r')
 	lines = f.read().replace('\r\n','\n').split('\n')
@@ -26,9 +28,11 @@ def load_file(filename):
 		
 
 def to_text(sdku):
+	''' Converts a 9x9 sudoku puzzle list into a printable format. '''
 	return '\n'.join([''.join([ y and str(y) or ' ' for y in x]) for x in sdku])
   
 def to_sudoku(txt):
+	''' Converts a 9-line, 9-column block of text into a sudoku puzzle list. '''
 	result = []
 	
 	lines = txt.split('\n')
@@ -48,9 +52,37 @@ def to_sudoku(txt):
 	return result
 
 def value_count(lst, val):
+	''' Counts the number of times a particular value appears in a list. '''
 	return len([x for x in lst if x == val])
 
+def flatten(lst_of_lst):
+	''' Flattens a list of lists into a set of unique values. '''
+	result = []
+	for lst in lst_of_lst:
+		for i in lst:
+			if not i in result:
+				result.append(i)
+	return result
+
+def is_failed(sdku):
+	''' Tests whether a sudoku puzzle grid is in a failed state by determining whether there are any rows, columns, or groups missing a possible number. '''
+	possibles = calculate_possibles(sdku)
+
+	for i in range(0, 9):
+		possible_cols = flatten(get_col(possibles, i))
+		possible_rows = flatten(possibles[i])
+		possible_grp = flatten(get_group_by_number(possibles, i))
+		for n in range(1, 10):
+			if n not in possible_cols:
+				return True
+			if n not in possible_rows:
+				return True
+			if n not in possible_grp:
+				return True
+	return False
+
 def is_solved(sdku):
+	''' Tests whether a sudoku puzzle grid is fully solved. '''
 	# Test that no empty cells exist and sanity check each row
 	for row in sdku:
 		for cell in row:
@@ -116,7 +148,7 @@ def get_group(sdku, x, y, includeCell):
 	return result
 
 def get_group_by_number(sdku, index):
-
+	''' Returns a group based on an index, where 0 = the top left corner and 8 = the bottom right corner. '''
 	row = math.floor(index / 3.0)
 	col = index % 3
 	
@@ -163,13 +195,9 @@ def calculate_possibles(sdku):
 		
 	return result
 
-def count_in(array, value):
-	return len([x for x in array if x == value])
-
-	
 def remove_row_multiples(row_possibles):
 	''' For any N rows that have exactly the same set of possibles, remove from all other possibles in that set. '''
-	duplicates = [x for x in row_possibles if count_in(row_possibles, x) == len(x) and len(x) > 1]
+	duplicates = [x for x in row_possibles if value_count(row_possibles, x) == len(x) and len(x) > 1]
 	
 	if not duplicates:
 		return False
@@ -191,7 +219,7 @@ def remove_row_multiples(row_possibles):
 def remove_col_multiples(possibles, col):
 	''' For any N columns that have exactly the same set of possibles, remove from all other possibles in that set. '''
 	col_possibles = get_col(possibles, col)
-	duplicates = [x for x in col_possibles if count_in(col_possibles, x) == len(x) and len(x) > 1]
+	duplicates = [x for x in col_possibles if value_count(col_possibles, x) == len(x) and len(x) > 1]
 	
 	if not duplicates:
 		return False
@@ -213,7 +241,7 @@ def remove_col_multiples(possibles, col):
 def remove_group_multiples(possibles, grp):
 	''' For any N group items that have exactly the same set of possibles, remove from all other possibles in that set. '''
 	grp_possibles = get_group_by_number(possibles, grp)
-	duplicates = [x for x in grp_possibles if count_in(grp_possibles, x) == len(x) and len(x) > 1]
+	duplicates = [x for x in grp_possibles if value_count(grp_possibles, x) == len(x) and len(x) > 1]
 	
 	if not duplicates:
 		return False
@@ -235,9 +263,42 @@ def remove_group_multiples(possibles, grp):
 						has_changed = True
 						
 	return has_changed
-	
+
+def try_guess(sdku):
+	''' Takes the first square that has only two possible values, picks one, resolves the rest, and tests for failure.
+
+	If successful, returns the resulting puzzle grid. If failed, returns a puzzle grid with the other value inserted.'''
+	work = sdku.copy()
+	possibles = calculate_possibles(work)
+
+	if not [x for x in flatten(possibles) if len(x) == 2]:
+		return work
+
+	for y in range(0, 9):
+		for x in range(0, 9):
+			if len(possibles[y][x]) == 2:
+				work[y][x] = possibles[y][x][0]
+				work = solve(work)
+
+				if is_failed(work):
+					work = sdku.copy()
+					work[y][x] = possibles[y][x][1]
+
+	work = solve(work)
+
+	return work
+
 			
 def solve(sdku):
+	''' Solves a partially finished sudoku puzzle grid by executing the following until no further changes have been made:
+
+	1. Caclulate possible values for each square, based on the values in the row, column, and group.
+	2. Process each square in the working copy:
+		2a. If there is only one possible choice for a square, set it in the working copy.
+		2b. If there is a possible value that doesn't appear elsewhere in the row, column, or group, set it in the working copy.
+	
+	If the puzzle is not solved by the time the loop exits, find the first square with only 2 possibilities and test each possibility
+	recursively, returning the result.'''
 	work = sdku.copy()
 	
 	has_changed = True
@@ -268,7 +329,10 @@ def solve(sdku):
 							has_changed = True
 							work[row][col] = n
 							break
-	
+
+	if not is_solved(work) and not is_failed(work):
+		work = try_guess(work)
+
 	return work
 			
 print("File: %s" % sys.argv[1])
