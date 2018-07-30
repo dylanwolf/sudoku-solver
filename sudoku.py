@@ -343,5 +343,6 @@ for p in load_file(sys.argv[1]):
 	solved = solve(p.sudoku)
 	print(p.name)
 	print("Solved: %s" % (is_solved(solved)))
+	print("Failed: %s" % (is_failed(solved)))
 	print(to_text(solved))
 	print('')
